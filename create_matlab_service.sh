@@ -3,30 +3,75 @@ set -o pipefail
 # To use: call the script with first argument being the path to source code and metadata, second argument being the name of the project. 
 # Example: . create_opencor_service.sh /home/zhuang/Downloads/myproject/ demo
 
-# open model and make sure that works
-python3 -m venv .venv
-source .venv/bin/activate
-pip install cookiecutter
-pip install PyYAML
+export SRCDIR=$(echo $1 | sed 's![^/]$!&/!')
+echo $SRCDIR
 
-# create a new service with added context
-python3 create_cookie.py $1 $2
+# python3 -m venv .venv
+# source .venv/bin/activate
+# pip install cookiecutter
+# pip install PyYAML
 
-# in the new service directory, make the virtual environment and build the cookie
-make -C $2 .venv
-make -C $2 devenv
-source "$2/.venv/bin/activate"
-make -C $2 build
+# # create a new service with added context
+# python3 create_cookie.py $1 $2
 
-# copy the model and the python script to run the model into src directory
-cp -R $1 "$2/src/$2/"
-# cp run_model.py "$2/src/$2/"
+# # compile the matlab code if needed
+# echo "Does this matlab code need to be compiled or is it already compiled? "
+# select yn in "needs to be compiled" "already compiled"; do
+#     case $yn in
 
-# # edit files in docker and service.cli 
-# python3 customize_cookie.py "${1##*/}" $2
-# chmod +x "$2/service.cli/execute.sh"
+#         "needs to be compiled" )
+#         # check that an entrypoint exists, default name main.m
+#         echo "searching for ${SRCDIR}main.m"
+#         if [[ -f "${SRCDIR}main.m" ]]
+#         then
+#             echo "You have a main.m - you can compile this code!"
+#         else
+#             echo "No main.m file in your source code - you cannot compile!"
+#             return
+#         fi
 
-# build and run container, copy validation output to validation folder
+#         # compile to the src dir of the cookie by default
+#         read -p "Where should the code be compiled to [$2/src/$2]: " BUILDDIR
+#         BUILDDIR=${BUILDDIR:-$2/src/$2}
+#         mkdir -p "$BUILDDIR"
+#         echo "compiling matlab code into $BUILDDIR"
+#         mcc -m ${SRCDIR}main -d "$BUILDDIR" -o $2
+#         export COMPILEDSH=run_$2.sh
+#         echo "shell script to run the matlab executable is: $COMPILEDSH"
+#         break;;
+
+#         "already compiled" ) 
+#         read -p "What is the name of the shell script? [run_$2.sh]: " COMPILEDSH
+#         COMPILEDSH=${COMPILEDSH:-run_$2.sh}
+#         echo "shell script to run the matlab executable is: $COMPILEDSH"
+#         cp -a $1/. $2/src/$2/
+#         break;; 
+
+#         *) 
+#         echo "Answer '1' or '2'" ;;
+#     esac
+# done
+
+
+# # in the new service directory, make the virtual environment and build the cookie
+# make -C $2 .venv
+# make -C $2 devenv
+# source $2/.venv/bin/activate
+# make -C $2 build
+
+# # copy Matlab Runtime into the service
+# RUNTIME_FILE=$(find MATLAB_Runtime*)
+# mkdir -p $2/redist
+# cp $RUNTIME_FILE $2/redist/
+# echo "!redist/" >> $2/.dockerignore
+
+# deactivate
+
+# edit files in docker and service.cli 
+python3 customize_cookie.py $SRCDIR $2
+chmod +x "$2/service.cli/execute.sh"
+
+# # build and run container, copy validation output to validation folder
 # make -C $2 build
 # make -C $2 up
 # cp "$2/.tmp/output/outputs.csv" "$2/validation/output/"

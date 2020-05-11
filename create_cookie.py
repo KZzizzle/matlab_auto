@@ -6,33 +6,33 @@ import json
 from pathlib import Path
 
 def main(sourcepath, servicename):
-
-    metadata_file = Path(sourcepath+"/sampledat.json")
+        
+    metadata_file = Path(sourcepath+"sampledat.json")
 
     try:
         with metadata_file.open("r") as fp:
             metadata_dict = json.load(fp)
 
-        num_inputs = len(metadata_dict['serviceInterface']['inputs'])
-        num_outputs = len(metadata_dict['serviceInterface']['outputs'])
+        num_inputs = len(metadata_dict["serviceInterface"]["inputs"])
+        num_outputs = len(metadata_dict["serviceInterface"]["outputs"])
     except:
-        print('Could not find metadata file in source code folder')
+        print("Could not open sampledat.json metadata file in specified source code folder " + sourcepath)
         return 3
 
     try:
-        cookiecutter('https://github.com/ITISFoundation/cookiecutter-osparc-service', extra_context={
-            'docker_base':"ubuntu:18.04",
-            'number_of_inputs': num_inputs, 
-            'author_affiliation': 'ITIS Foundation',
-            'project_name': servicename,
-            'author_name': "Katie Zhuang",
-            'author_email': "zhuang@itis.swiss",
-            'project_type': "computational",
-            'number_of_outputs': num_outputs,
-            'git_username': "KZzizzle"
+        cookiecutter("https://github.com/ITISFoundation/cookiecutter-osparc-service", extra_context={
+            "docker_base":"ubuntu:18.04",
+            "number_of_inputs": num_inputs, 
+            "author_affiliation": "IT'IS Foundation",
+            "project_name": servicename,
+            "author_name": "Katie Zhuang",
+            "author_email": "zhuang@itis.swiss",
+            "project_type": "computational",
+            "number_of_outputs": num_outputs,
+            "git_username": "KZzizzle"
         })
     except:
-        print('Could not create the cookie')
+        print("Could not create the cookie")
         return 2
 
     copyfile(servicename + "/docker/ubuntu/Dockerfile", servicename + "/docker/ubuntu/Dockerfile_copy")
@@ -54,11 +54,11 @@ if __name__ == "__main__":
         sourcepath = str(args.pop(0))
         servicename = str(args.pop(0))
     except ValueError:
-        print('ValueError in inputs')
+        print("ValueError in inputs")
         usage()
         sys.exit(2)
     except IndexError:
-        print('indexError in inputs')
+        print("indexError in inputs")
         usage()
         sys.exit(2)
 
