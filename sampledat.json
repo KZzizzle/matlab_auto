@@ -15,13 +15,13 @@
         "inputs": [
             {
                 "name": "input1",
-                "type": "complex",
+                "type": "number",
                 "defaultValue": "null",
                 "label": "input #1",
                 "description": "Input number one"
             }, {
                 "name": "input2",
-                "type": "complex",
+                "type": "number",
                 "defaultValue": "null",
                 "label": "input #2",
                 "description": "Input number two"
@@ -30,7 +30,7 @@
         "outputs": [
             {
                 "name": "output1",
-                "type": "complex",
+                "type": "number",
                 "defaultValue": "null",
                 "label": "Output #1",
                 "description": "Output number one"
