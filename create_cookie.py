@@ -12,7 +12,7 @@ def main(sourcepath, servicename):
     try:
         with metadata_file.open("r") as fp:
             metadata_dict = json.load(fp)
-
+        
         num_inputs = len(metadata_dict["serviceInterface"]["inputs"])
         num_outputs = len(metadata_dict["serviceInterface"]["outputs"])
     except:
