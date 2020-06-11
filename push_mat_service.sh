@@ -1,4 +1,7 @@
 
+#!/bin/bash
+set -euxo pipefail
+
 
 # # #=============================== ready to push? takes care of CI =======================================
 # To use: call the script with first argument being the cellML or sedML path, second argument being the name of the project. 
