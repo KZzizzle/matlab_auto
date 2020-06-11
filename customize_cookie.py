@@ -13,7 +13,7 @@ copyfile(project_name + "/service.cli/execute.sh", project_name + "/service.cli/
 copyfile(project_name+ "/metadata/metadata.yml", project_name + "/metadata/metadata_copy.yml")
 
 #=======================================================================
-# Edit metadata file
+# Data MIME types for reference for inputs and outputs of the service
 #=======================================================================
 accepted_datatypes = [
     "number",
@@ -31,6 +31,7 @@ accepted_datatypes = [
     "data:application/hdf5"
     ]
 
+# if the input type contains any of these substrings, it is treated as a file input
 file_datatypes = [
     "data:*/*",
     "data:image",
@@ -38,9 +39,17 @@ file_datatypes = [
     "data:text"
 ]
 
+#=======================================================================
+# Helper functions
+#=======================================================================
+
+# used for logging: pringing 'null' if a string is empty
 def xstr(s):
     return 'null' if s is None else str(s)
 
+# used for filling in input/output metadata fields: modeldict is the imported metadata that the user
+# has submittted using the UI submission form, numentries is the number of entries in the input/output fields
+# iostr should be either 'input_' or 'output_' 
 def fill_meta_dict(modeldict, numentries, iostr):
     json_dict = {}
     filled_meta_dict = {}
@@ -68,6 +77,7 @@ def fill_meta_dict(modeldict, numentries, iostr):
             'type': datatype,
             'defaultValue': modeldict[i]['defaultValue']
         }
+        # outputs do not have a 'defaultValue' field for o²S²PARC  services
         if iostr .__contains__('out'):
             filled_meta_dict[keyname].pop('defaultValue', None)
 
@@ -89,6 +99,7 @@ def fill_meta_dict(modeldict, numentries, iostr):
                     print("file " + filename + " cannot be moved to validation folder - make sure it exists in " + project_name + "/src")
                     quit()
         else:
+            # outputs do not have a 'defaultValue' field for o²S²PARC  services
             if 'out' not in iostr:
                 try:
                     if datatype == 'number':
@@ -110,6 +121,9 @@ def fill_meta_dict(modeldict, numentries, iostr):
                     json_dict.update({keyname: filled_meta_dict[keyname]['defaultValue']})
     return filled_meta_dict, json_dict, keymap
         
+#=======================================================================
+# Edit metadata file
+#=======================================================================
 
 # read submitted metadata
 submitted_meta = Path(sourcepath+'sampledat.json')
@@ -142,14 +156,16 @@ with metadata_file_edited.open('w') as fp:
 input_map_file = Path(project_name+"/src/" + project_name + "/input_keymap.json")
 with input_map_file.open("w") as fp:
     json.dump(input_keymap, fp, indent=4)
-
+    
+# write output map to file
 output_map_file = Path(project_name+"/src/" + project_name + "/output_keymap.json")
 with output_map_file.open("w") as fp:
     json.dump(output_keymap, fp, indent=4)
 
 #=======================================================================
-# write validation input file for non-file inputs
+# write validation input/output files for non-file inputs
 #=======================================================================
+
 inputvalidation_file = Path(project_name+"/validation/input/inputs.json")
 if len(input_dict)>0: 
     with inputvalidation_file.open("w") as fpin:
@@ -179,7 +195,7 @@ with Docker_file.open('r') as d_file:
 
 with Docker_fileout.open('w') as dout_file:
     for line in buf:
-        # use existing image with Matlab Runtime
+        # use existing image with Matlab Runtime already installed
         if line .__contains__("as base"):
             line = "FROM ${SC_CI_MASTER_REGISTRY:-masu.speag.com}/simcore/base-images/mat2019b_ubu1804:0.1.0 as base\n"
         # copy executable into docker image
@@ -230,26 +246,26 @@ with execute_fileout.open('w') as eout_file:
         if index <= lastline:
             dummyvar = eout_file.write(line)
 
-# #=======================================================================
-# # edit README.md
-# #=======================================================================
-# readme_file = Path(project_name+'/README.md')
+#=======================================================================
+# edit README.md
+#=======================================================================
+readme_file = Path(project_name+'/README.md')
 
-# version_text = """ Two versions:
+version_text = """ Two versions:
 
-# - integration version (e.g. [src/opencorservice_demo/VERSION_INTEGRATION]) is updated with ``make version-integration-*``
-# - service version (e.g. [src/opencorservice_demo/VERSION]) is updated with ``make version-service-*``
-# """
+- integration version (e.g. [src/ """ + project_name + """/VERSION_INTEGRATION]) is updated with ``make version-integration-*``
+- service version (e.g. [src/""" + project_name + """/VERSION]) is updated with ``make version-service-*``
+"""
 
-# with readme_file.open('r') as r_file:
-#     rbuf = r_file.readlines()
+with readme_file.open('r') as r_file:
+    rbuf = r_file.readlines()
 
-# lastline = len(rbuf)
-# with readme_file.open('w') as rout_file:
-#     for index, line in enumerate(rbuf):
-#         if line .__contains__('## Workflow'):
-#             line = version_text
-#             lastline = index
-#         if index <= lastline:
-#             dummyvar = rout_file.write(line)
+lastline = len(rbuf)
+with readme_file.open('w') as rout_file:
+    for index, line in enumerate(rbuf):
+        if line .__contains__('## Workflow'):
+            line = version_text
+            lastline = index
+        if index <= lastline:
+            dummyvar = rout_file.write(line)
 
