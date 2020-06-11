@@ -4,21 +4,25 @@ import json
 import pprint
 from pathlib import Path
 import os
-
+from shutil import copyfile
 
 sourcepath = str(sys.argv[1])
 project_name = str(sys.argv[2])
-
+copyfile(project_name + "/docker/ubuntu/Dockerfile", project_name + "/docker/ubuntu/Dockerfile_copy")
+copyfile(project_name + "/service.cli/execute.sh", project_name + "/service.cli/execute_copy.sh")
+copyfile(project_name+ "/metadata/metadata.yml", project_name + "/metadata/metadata_copy.yml")
 
 #=======================================================================
 # Edit metadata file
 #=======================================================================
 accepted_datatypes = [
     "number",
+    "integer",
     "boolean",
     "data:*/*",
     "data:text/*",
-    "data:[image/jpeg,image/png]",
+    "data:image/jpeg",
+    "data:image/png",
     "data:application/csv",
     "data:application/json",
     "data:application/json;schema=https://my-schema/not/really/schema.json",
@@ -27,6 +31,85 @@ accepted_datatypes = [
     "data:application/hdf5"
     ]
 
+file_datatypes = [
+    "data:*/*",
+    "data:image",
+    "data:application",
+    "data:text"
+]
+
+def xstr(s):
+    return 'null' if s is None else str(s)
+
+def fill_meta_dict(modeldict, numentries, iostr):
+    json_dict = {}
+    filled_meta_dict = {}
+    keymap = {}
+
+    for i in range(numentries):    
+        keyname = iostr + str(i).zfill(3)
+        keymap[keyname] = modeldict[i]['name']
+
+
+        # make sure that the data type given is acceptable
+        datatype = modeldict[i]['type'].lower()
+        while datatype not in accepted_datatypes:
+            if datatype == 'list':
+                print(pprint.pformat(accepted_datatypes))
+            else:
+                print("\nFor \n" + modeldict[i]['label'] + " : \n" + pprint.pformat(modeldict[i]))
+            datatype = input("The datatype '" + datatype + 
+            "' is not in the list of valid types. Please enter replacement or 'list' for list of valid types: ")
+
+        filled_meta_dict[keyname] = {
+            'displayOrder': i+1,
+            'label': modeldict[i]['label'],
+            'description': modeldict[i]['description'],
+            'type': datatype,
+            'defaultValue': modeldict[i]['defaultValue']
+        }
+        if iostr .__contains__('out'):
+            filled_meta_dict[keyname].pop('defaultValue', None)
+
+        # fill in file mapping if necessary
+        if any(ftype in datatype for ftype in file_datatypes):
+            answer = ''
+            while answer.lower() not in ['y', 'yes', 's']:
+                file_name = input("\nPlease enter the filename for \n" + pprint.pformat(modeldict[i]) 
+                + "\nhere [" + modeldict[i]['defaultValue'] + "]: ") or modeldict[i]['defaultValue']
+                answer = input("Validation file for \n" + modeldict[i]['label'] + " will be '" + file_name + "' ok? (y/n) or 's' to skip this file: ") 
+                filled_meta_dict[keyname].update({'fileToKeyMap': {file_name : keyname }})
+            if answer.lower() in ['y', 'yes']:
+                try:
+                    if iostr .__contains__('out'):
+                        os.replace(project_name + "/src/" + project_name + "/" + file_name, project_name + "/validation/output/" + file_name)
+                    else:
+                        os.replace(project_name + "/src/" + project_name + "/" + file_name, project_name + "/validation/input/" + file_name)
+                except:
+                    print("file " + filename + " cannot be moved to validation folder - make sure it exists in " + project_name + "/src")
+                    quit()
+        else:
+            if 'out' not in iostr:
+                try:
+                    if datatype == 'number':
+                        default_number = float(filled_meta_dict[keyname]['defaultValue'])
+                        json_dict.update({keyname: default_number})
+                    elif datatype == 'integer':
+                        default_int = int(filled_meta_dict[keyname]['defaultValue'])
+                        json_dict.update({keyname: default_int})
+                    elif datatype == 'boolean':
+                        default_bool = filled_meta_dict[keyname]['defaultValue'].capitalize()
+                        json_dict.update({keyname: default_bool})
+                    else:
+                        json_dict.update({keyname: filled_meta_dict[keyname]['defaultValue']})
+                except ValueError:
+                    print("WARNING: Value of " + xstr(filled_meta_dict[keyname]['defaultValue']) + " could not be converted to " + datatype)
+                    json_dict.update({keyname: filled_meta_dict[keyname]['defaultValue']})
+                except:
+                    print("WARNING: Problem with output value: " + xstr(filled_meta_dict[keyname]['defaultValue']) + " with datatype: " + datatype)
+                    json_dict.update({keyname: filled_meta_dict[keyname]['defaultValue']})
+    return filled_meta_dict, json_dict, keymap
+        
 
 # read submitted metadata
 submitted_meta = Path(sourcepath+'sampledat.json')
@@ -37,100 +120,32 @@ num_inputs = len(model_inputs)
 model_outputs = submitted_dict['serviceInterface']['outputs']
 num_outputs = len(model_outputs) 
 
-
 # get metadata file of the cookie
 metadata_file = Path(project_name + "/metadata/metadata_copy.yml")
 with metadata_file.open('r') as fp:
     metadata_dict = yaml.safe_load(fp)
 
-# replace default INPUT fields in metadata.yml with values from the submitted meetadata
-input_keymap = {}
-metadata_dict['inputs'] = {}
-input_dict={}
-
-for i in range(num_inputs):    
-
-    keyname = model_inputs[i]['name']
-
-    # make sure that the data type given is acceptable
-    datatype = model_inputs[i]['type'].lower()
-    while datatype not in accepted_datatypes:
-        if datatype == 'list':
-            print(pprint.pformat(accepted_datatypes))
-        else:
-            print("\nFor " + model_inputs[i]['label'] + " : \n" + pprint.pformat(model_inputs[i]))
-        datatype = input("The datatype '" + datatype + 
-        "' is not in the list of valid types. Please enter replacement or 'list' for list of valid types: ")
-
-    metadata_dict['inputs'][keyname] = {
-        'displayOrder': i+1,
-        'label': model_inputs[i]['label'],
-        'description': model_inputs[i]['description'],
-        'type': datatype,
-        'defaultValue': model_inputs[i]['defaultValue']
-    }
-
-    # fill in file mapping if necessary
-    if datatype == 'data:*/*' or 'data:application' in datatype:
-        answer = ''
-        while answer != 'y':
-            inputfile_name = input("\nPlease enter the filename for " + pprint.pformat(model_inputs[i]) 
-            + "\nhere [" + model_inputs[i]['defaultValue'] + "]: ") or model_inputs[i]['defaultValue']
-            answer = input("Validation input file for " + model_inputs[i]['label'] + " will be '" + inputfile_name + "' ok? (y/n): ") 
-            metadata_dict['inputs'][keyname].update({'fileToKeyMap': {inputfile_name : model_inputs[i]["name"] }})
-        try:
-            os.replace(project_name + "/src/" + project_name + "/" + inputfile_name, project_name + "/validation/input/" + inputfile_name)
-        except:
-            print("File cannot be moved to validation folder")
-            quit()
-    elif datatype == 'number':
-        default_number = float(metadata_dict["inputs"][keyname]["defaultValue"])
-        input_dict.update({keyname: default_number})
-    else:
-        input_dict.update({keyname: metadata_dict["inputs"][keyname]["defaultValue"]})
 
 # replace default OUTPUT fields in metadata.yml with values from the submitted meetadata
-output_keymap = {}
-metadata_dict['outputs'] = {}
-for i in range(num_outputs):    
+metadata_dict['inputs'], input_dict, input_keymap = fill_meta_dict(model_inputs, num_inputs, 'input_')
 
-    keyname = model_outputs[i]['name']
+# replace default OUTPUT fields in metadata.yml with values from the submitted meetadata
+metadata_dict['outputs'], output_dict, output_keymap = fill_meta_dict(model_outputs, num_outputs, 'output_')
 
-    # make sure that the data type given is acceptable
-    datatype = model_outputs[i]['type'].lower()
-    while datatype not in accepted_datatypes:
-        if datatype == 'list':
-            print(pprint.pformat(accepted_datatypes))
-        else:
-            print("\nFor " + model_outputs[i]['label'] + " : \n" + pprint.pformat(model_outputs[i]))
-        datatype = input("The datatype '" + datatype + 
-        "' is not in the list of valid types. Please enter replacement or 'list' for list of valid types: ")
-
-    metadata_dict['outputs'][keyname] = {
-        'displayOrder': i+1,
-        'label': model_outputs[i]['label'],
-        'description': model_outputs[i]['description'],
-        'type': datatype
-    }
-
-    # fill in file mapping if necessary
-    if datatype == 'data:*/*' or 'data:application' in datatype:
-        answer = ''
-        while answer != 'y':
-            outputfile_name = input("\nPlease enter the filename for " + pprint.pformat(model_outputs[i]) 
-            + "\nhere [" + model_outputs[i]['validationFile'] + "]: ") or model_outputs[i]['validationFile']
-            answer = input("Validation output file for " + model_outputs[i]['label'] + " will be '" + outputfile_name + "' ok? (y/n): ") 
-            metadata_dict['outputs'][keyname].update({'fileToKeyMap': {outputfile_name : model_outputs[i]["name"] }})
-        try:
-            os.replace(project_name + "/src/" + project_name + "/" + outputfile_name, project_name + "/validation/output/" + outputfile_name)
-        except:
-            print("file cannot be moved to validation folder")
-            quit()
 
 # write to metadata file
 metadata_file_edited = Path(project_name+'/metadata/metadata.yml')
 with metadata_file_edited.open('w') as fp:
     yaml.safe_dump(metadata_dict, fp, default_style=None, default_flow_style=False)
+
+# write input map to file
+input_map_file = Path(project_name+"/src/" + project_name + "/input_keymap.json")
+with input_map_file.open("w") as fp:
+    json.dump(input_keymap, fp, indent=4)
+
+output_map_file = Path(project_name+"/src/" + project_name + "/output_keymap.json")
+with output_map_file.open("w") as fp:
+    json.dump(output_keymap, fp, indent=4)
 
 #=======================================================================
 # write validation input file for non-file inputs
@@ -143,6 +158,14 @@ else:
     if os.path.exists(inputvalidation_file):
         os.remove(inputvalidation_file)
 
+outputvalidation_file = Path(project_name+"/validation/output/outputs.json")
+if len(output_dict)>0: 
+    with outputvalidation_file.open("w") as fpin:
+        json.dump(output_dict, fpin, indent=4)
+else:
+    if os.path.exists(outputvalidation_file):
+        os.remove(outputvalidation_file)
+        
 #=======================================================================
 # edit the Dockerfile
 #=======================================================================
@@ -150,36 +173,16 @@ else:
 Docker_file = Path(project_name+'/docker/ubuntu/Dockerfile_copy')
 Docker_fileout = Path(project_name+'/docker/ubuntu/Dockerfile')
 
-# additional text to install dependencies
-addtext = """
-# make sure that this is the version of Matlab used to compile!!!
-ENV MATLAB_VERSION R2019b 
-
-RUN mkdir -p /redist
-COPY redist/MATLAB_Runtime_R2019b_Update_4_glnxa64.zip /redist
-WORKDIR /redist
-
-RUN unzip MATLAB_Runtime_R2019b_Update_4_glnxa64.zip \
- && ./install -v -mode silent -agreeToLicense yes
-RUN chown ${SC_USER_NAME}:${SC_USER_NAME} /usr/local/MATLAB/MATLAB_Runtime/v97/*
-
-WORKDIR /home/${SC_USER_NAME}
-RUN rm -rf /redist
-
-"""
-
 # make the changes in the Docker file
 with Docker_file.open('r') as d_file:
     buf = d_file.readlines()
 
 with Docker_fileout.open('w') as dout_file:
     for line in buf:
-        # install unzip
-        if line .__contains__("jq \\"):
-            line = line + "\tunzip  xorg \\\n"
-        # copy Matlab Runtime into image
-        elif line .__contains__("copy docker bootup scripts"):
-            line = addtext + line
+        # use existing image with Matlab Runtime
+        if line .__contains__("as base"):
+            line = "FROM ${SC_CI_MASTER_REGISTRY:-masu.speag.com}/simcore/base-images/mat2019b_ubu1804:0.1.0 as base\n"
+        # copy executable into docker image
         elif line .__contains__("RUN cp -R "): 
             line = "RUN cp -R src/" + project_name + "/* /build/bin\n\n"
         dummyvar = dout_file.write(line)
@@ -192,16 +195,25 @@ with Docker_fileout.open('w') as dout_file:
 execute_file = Path(project_name+'/service.cli/execute_copy.sh')
 execute_fileout = Path(project_name+'/service.cli/execute.sh')
 
+input_keys = []
 answer = ''
 while answer != 'y':
     input_string = input("\nPlease enter the ordered list of inputs to the compiled matlab program: ")
     input_list = [x.strip() for x in input_string.split(',')]
     answer = input("Ordered list of inputs will be  " + str(input_list) + "  ok? (y/n): ") 
 
+
+for input_str in input_list:
+    for key, value in input_keymap.items():
+        if input_str not in input_keymap.values():
+            print("ERROR: Input variable " + value + " was not found in input list: " + str(input_keymap.values()))
+        elif str(input_str) == str(value):
+            input_keys.append(key)
+
 executetext =("\necho \"Starting simulation...\"\n/home/scu/" + project_name + "/run_" 
 + project_name + ".sh /usr/local/MATLAB/MATLAB_Runtime/v97/ " 
-+ '} '.join("${{{0}".format(x.upper()) for x in input_list) + '}' 
-+ "\necho \"Simulation finished!\"\n\ncp *.csv $OUTPUT_FOLDER/\ncp *.mat $OUTPUT_FOLDER/")
++ '} '.join("${{{0}".format(x.upper()) for x in input_keys) + '}' 
++ "\necho \"Simulation finished!\"\n\n")
 
 
 with execute_file.open('r') as e_file:
@@ -210,9 +222,11 @@ with execute_file.open('r') as e_file:
 lastline = len(ebuf)
 with execute_fileout.open('w') as eout_file:
     for index, line in enumerate(ebuf):
-        if line .__contains__('# For example: input_1 -> $INPUT_1'):
+        if line .__contains__("# For example: input_1 -> $INPUT_1"):
             line = line + executetext
             lastline = index
+        elif line .__contains__("cd "):
+            line = "cd $OUTPUT_FOLDER/\n"
         if index <= lastline:
             dummyvar = eout_file.write(line)
 

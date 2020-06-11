@@ -1,5 +1,5 @@
 #!/bin/bash
-set -o pipefail
+set -euxo pipefail
 
 #=================================================================================
 # To use: call the script with first argument being the path to source code and metadata, 
@@ -23,7 +23,7 @@ python3 create_cookie.py $SRCDIR $2
 #=================================================================================
 # compile the matlab code if needed
 #=================================================================================
-echo "Does this matlab code need to be compiled or is it already compiled? "
+echo "Does this matlab code need to be compiled or is it already compiled with Matlab 2019b? "
 select yn in "needs to be compiled" "already compiled"; do
     case $yn in
 
@@ -35,9 +35,8 @@ select yn in "needs to be compiled" "already compiled"; do
             echo "You have a main.m - you can compile this code!"
         else
             echo "No main.m file in your source code - you cannot compile!"
-            return
+            return 3
         fi
-
         # compile to the src dir of the cookie by default
         read -p "Where should the code be compiled to [$2/src/$2]: " BUILDDIR
         BUILDDIR=${BUILDDIR:-$2/src/$2}
@@ -71,11 +70,6 @@ make -C $2 build
 # copy submission data into the src directory
 cp $SRCDIR* $2/src/$2
 
-# copy Matlab Runtime into the service to run code
-RUNTIME_FILE=$(find MATLAB_Runtime*)
-mkdir -p $2/redist
-cp $RUNTIME_FILE $2/redist/
-echo "!redist/" >> $2/.dockerignore
 
 #=================================================================================
 # edit files in docker and service.cli 
@@ -84,12 +78,11 @@ python3 customize_cookie.py $SRCDIR $2
 chmod +x "$2/service.cli/execute.sh"
 
 #=================================================================================
-# build and run container, copy validation output to validation folder
+# build and run container
 #=================================================================================
 make -C $2 build
 make -C $2 up
 
-rm "$2/validation/output/outputs.json"
 rm "$2/docker/ubuntu/Dockerfile_copy"
 rm "$2/metadata/metadata_copy.yml"
 rm "$2/service.cli/execute_copy.sh"
@@ -98,39 +91,3 @@ rm "$2/service.cli/execute_copy.sh"
 make -C $2 tests
 deactivate
 
-
-# #=============================== ready to push? takes care of CI =======================================
-
-
-# read -p "Where is the osparc-services directory cloned locally [../osparc-services/]: " SERVICES_DIR
-# SERVICES_DIR=${SERVICES_DIR:-../osparc-services}
-# echo $SERVICES_DIR
-# read -p "What name should this folder have on the github repository [oc-guytonmodel]: " FOLDER_NAME
-# FOLDER_NAME=${FOLDER_NAME:-oc-guytonmodel}
-# echo $FOLDER_NAME
-
-# echo "About to create new version of your service! Are you sure you want this? "
-# select yn in "yes" "no"; do
-#     case $yn in
-#         yes )
-#         source "$2/.venv/bin/activate"
-#         pip install bump2version
-#         make -C $2 version-service-major
-#         make -C $2 build
-#         make -C $2 up
-#         deactivate
-#         break;;
-#         no ) 
-#         return;; 
-#         *) 
-#         echo "Answer '1' or '2'" ;;
-#     esac
-# done
-
-
-# cp "$2/.github/workflows/github-ci.yml" "$2/.github/workflows/github-ci_copy.yml" 
-# python3 edit_ciyaml.py $2 ${FOLDER_NAME}
-# rm "$2/.github/workflows/github-ci_copy.yml" 
-
-# cp -R "$2/." "$SERVICES_DIR/services/$FOLDER_NAME"
-# mv "$SERVICES_DIR/services/$FOLDER_NAME/.github/workflows/github-ci.yml" "$SERVICES_DIR/.github/workflows/$FOLDER_NAME.yml"

@@ -7,6 +7,7 @@ from pathlib import Path
 
 def main(sourcepath, servicename):
         
+    # replace with prompt for metadata file
     metadata_file = Path(sourcepath+"sampledat.json")
 
     try:
