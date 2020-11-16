@@ -8,9 +8,9 @@ from shutil import copyfile
 
 sourcepath = str(sys.argv[1])
 project_name = str(sys.argv[2])
-copyfile(project_name + "/docker/ubuntu/Dockerfile", project_name + "/docker/ubuntu/Dockerfile_copy")
-copyfile(project_name + "/service.cli/execute.sh", project_name + "/service.cli/execute_copy.sh")
-copyfile(project_name+ "/metadata/metadata.yml", project_name + "/metadata/metadata_copy.yml")
+filedir = [f.path for f in os.scandir(Path(project_name  + "/docker")) if f.is_dir()]
+dockerfiledir = filedir[0]
+
 
 #=======================================================================
 # Data MIME types for reference for inputs and outputs of the service
@@ -43,7 +43,7 @@ file_datatypes = [
 # Helper functions
 #=======================================================================
 
-# used for logging: pringing 'null' if a string is empty
+# used for logging: printing 'null' if a string is empty
 def xstr(s):
     return 'null' if s is None else str(s)
 
@@ -124,27 +124,43 @@ def fill_meta_dict(modeldict, numentries, iostr):
 #=======================================================================
 # Edit metadata file
 #=======================================================================
+num_inputs = 0
+num_outputs = 0
+model_inputs = []
+model_outputs = []
 
 # read submitted metadata
-submitted_meta = Path(sourcepath+'sampledat.json')
+submitted_meta = Path(sourcepath+'metadata.json')
 with submitted_meta .open('r') as fp:
     submitted_dict  = json.load(fp) 
-model_inputs = submitted_dict['serviceInterface']['inputs']
-num_inputs = len(model_inputs) 
-model_outputs = submitted_dict['serviceInterface']['outputs']
-num_outputs = len(model_outputs) 
 
 # get metadata file of the cookie
 metadata_file = Path(project_name + "/metadata/metadata_copy.yml")
 with metadata_file.open('r') as fp:
     metadata_dict = yaml.safe_load(fp)
+    
 
+if "inputs" in submitted_dict["serviceInterface"]:
+    model_inputs = submitted_dict["serviceInterface"]["inputs"]
+    num_inputs = len(submitted_dict["serviceInterface"]["inputs"])
+    # replace default INPUT fields in metadata.yml with values from the submitted metadata
+    metadata_dict['inputs'], input_dict, input_keymap = fill_meta_dict(model_inputs, num_inputs, 'input_')
+else:
+    input_dict = {}
+    input_keymap = {}
+    metadata_dict.pop('inputs', None)
+    num_inputs = 0
 
-# replace default OUTPUT fields in metadata.yml with values from the submitted meetadata
-metadata_dict['inputs'], input_dict, input_keymap = fill_meta_dict(model_inputs, num_inputs, 'input_')
-
-# replace default OUTPUT fields in metadata.yml with values from the submitted meetadata
-metadata_dict['outputs'], output_dict, output_keymap = fill_meta_dict(model_outputs, num_outputs, 'output_')
+if "outputs" in submitted_dict["serviceInterface"]:
+    model_outputs = submitted_dict["serviceInterface"]["outputs"]    
+    num_outputs = len(submitted_dict["serviceInterface"]["outputs"])
+    # replace default OUTPUT fields in metadata.yml with values from the submitted metadata
+    metadata_dict['outputs'], output_dict, output_keymap = fill_meta_dict(model_outputs, num_outputs, 'output_')
+else:
+    output_dict = {}
+    output_keymap = {}
+    metadata_dict.pop('outputs', None)
+    num_outputs = 0
 
 
 # write to metadata file
@@ -186,8 +202,8 @@ else:
 # edit the Dockerfile
 #=======================================================================
 
-Docker_file = Path(project_name+'/docker/ubuntu/Dockerfile_copy')
-Docker_fileout = Path(project_name+'/docker/ubuntu/Dockerfile')
+Docker_file = Path(dockerfiledir +'/Dockerfile_copy')
+Docker_fileout = Path(dockerfiledir +'/Dockerfile')
 
 # make the changes in the Docker file
 with Docker_file.open('r') as d_file:
@@ -197,7 +213,7 @@ with Docker_fileout.open('w') as dout_file:
     for line in buf:
         # use existing image with Matlab Runtime already installed
         if line .__contains__("as base"):
-            line = "FROM ${SC_CI_MASTER_REGISTRY:-masu.speag.com}/simcore/base-images/mat2019b_ubu1804:0.1.0 as base\n"
+            line = "FROM ${SC_CI_MASTER_REGISTRY:-itisfoundation}/mat2019b_ubu1804:0.1.0 as base\n"
         # copy executable into docker image
         elif line .__contains__("RUN cp -R "): 
             line = "RUN cp -R src/" + project_name + "/* /build/bin\n\n"
@@ -213,7 +229,7 @@ execute_fileout = Path(project_name+'/service.cli/execute.sh')
 
 input_keys = []
 answer = ''
-while answer != 'y':
+while answer != 'y' and num_inputs>0:
     input_string = input("\nPlease enter the ordered list of inputs to the compiled matlab program: ")
     input_list = [x.strip() for x in input_string.split(',')]
     answer = input("Ordered list of inputs will be  " + str(input_list) + "  ok? (y/n): ") 

@@ -65,7 +65,6 @@ done
 make -C $2 .venv
 make -C $2 devenv
 source $2/.venv/bin/activate
-make -C $2 build
 
 # copy submission data into the src directory
 cp $SRCDIR* $2/src/$2
